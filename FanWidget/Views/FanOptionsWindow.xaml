@@ -1,0 +1,63 @@
+<Window x:Class="FanWidget.Views.FanOptionsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Options"
+        Width="400"
+        Height="520"
+        MinWidth="360"
+        MinHeight="360"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResizeWithGrip"
+        Background="#0F1419"
+        FontFamily="Segoe UI Variable Text, Segoe UI">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Options" FontSize="16" FontWeight="SemiBold"
+                   Foreground="{StaticResource TextBrush}" Margin="0,0,0,12"/>
+
+        <Border Grid.Row="1" Background="{StaticResource ChipBrush}" CornerRadius="10"
+                BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1"
+                Padding="12,10" Margin="0,0,0,14">
+            <StackPanel>
+                <CheckBox x:Name="StartupToggle" Style="{StaticResource AirflowCheckBox}"
+                          Content="Démarrer avec Windows" Margin="0,0,0,8"
+                          ToolTip="Lancer Airflow automatiquement à la connexion Windows"/>
+                <CheckBox x:Name="P100TileToggle" Style="{StaticResource AirflowCheckBox}"
+                          Content="Afficher la tuile GPU P100"
+                          ToolTip="Afficher ou masquer la carte de contrôle du GPU P100 dans le widget"/>
+            </StackPanel>
+        </Border>
+
+        <TextBlock Grid.Row="2" Text="Ventilateurs affichés" FontSize="14" FontWeight="SemiBold"
+                   Foreground="{StaticResource TextBrush}" Margin="0,0,0,6"/>
+        <TextBlock Grid.Row="3" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,12"
+                   Text="Cochez les ventilateurs à afficher dans le widget. Vous pouvez tous les masquer si seule la tuile P100 ou les profils vous suffisent."/>
+
+        <Border Grid.Row="4" Background="{StaticResource PanelBrush}" CornerRadius="10"
+                BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1"
+                Padding="8" Margin="0,0,0,12">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="FanListPanel"/>
+            </ScrollViewer>
+        </Border>
+
+        <StackPanel Grid.Row="5" Orientation="Horizontal" Margin="0,0,0,12">
+            <Button Content="Tout afficher" Style="{StaticResource AirflowButton}" Margin="0,0,8,0" Click="ShowAll_Click"/>
+            <Button Content="Tout masquer" Style="{StaticResource AirflowButton}" Click="HideAll_Click"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Annuler" Style="{StaticResource AirflowButton}" Margin="0,0,8,0" Click="Cancel_Click"/>
+            <Button Content="Enregistrer" Style="{StaticResource AirflowPrimaryButton}" IsDefault="True" Click="Save_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

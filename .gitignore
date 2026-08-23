@@ -1,0 +1,28 @@
+# Build
+**/bin/
+**/obj/
+**/out/
+
+# Visual Studio / Rider
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Secrets
+.env
+.env.*
+*.pfx
+credentials.json
+
+# Cursor / IDE local
+.cursor/
+
+# Scans matériel locaux (debug)
+hardware-scan*.txt

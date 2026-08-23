@@ -1,0 +1,46 @@
+<Window x:Class="FanWidget.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Paramètres ventilateurs"
+        Width="420"
+        Height="280"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="#0F1419">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Associer les ventilateurs"
+                   Foreground="#E8EDF2" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,6"/>
+        <TextBlock Grid.Row="1" TextWrapping="Wrap" Foreground="#7A8A9A" FontSize="12" Margin="0,0,0,16"
+                   Text="Sélectionnez les capteurs correspondant à Sys Fan 1 et Sys Fan 2 de votre carte mère. Les noms varient selon le fabricant (MSI, ASUS, Gigabyte…)."/>
+
+        <Grid Grid.Row="2" Margin="0,0,0,8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="100"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Sys Fan 1" Foreground="#E8EDF2" VerticalAlignment="Center" Margin="0,0,0,10"/>
+            <ComboBox x:Name="Fan1Combo" Grid.Row="0" Grid.Column="1" Margin="0,0,0,10" Padding="8,6"/>
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Sys Fan 2" Foreground="#E8EDF2" VerticalAlignment="Center"/>
+            <ComboBox x:Name="Fan2Combo" Grid.Row="1" Grid.Column="1" Padding="8,6"/>
+        </Grid>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="Annuler" Padding="16,8" Margin="0,0,8,0" Click="Cancel_Click"/>
+            <Button Content="Enregistrer" Padding="16,8" IsDefault="True" Click="Save_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>
