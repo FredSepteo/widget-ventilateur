@@ -31,13 +31,6 @@
                         <TextBlock x:Name="ModeText" Text="{Binding ModeLabel}" FontSize="10"
                                    FontWeight="Bold" Foreground="#7B8C9C"/>
                     </Border>
-                    <Border x:Name="P100FloorBadge" Background="#1A2834" CornerRadius="6"
-                            Padding="7,2" Margin="6,0,0,0" VerticalAlignment="Center"
-                            BorderBrush="#2EE6A8" BorderThickness="1" Visibility="Collapsed"
-                            ToolTip="Plancher permanent — refroidissement GPU P100">
-                        <TextBlock x:Name="P100FloorText" Text="P100 ≥30 %" FontSize="10"
-                                   FontWeight="Bold" Foreground="#2EE6A8"/>
-                    </Border>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <TextBlock Text="{Binding RpmText}" FontSize="11" Foreground="#7B8C9C" Margin="0,0,10,0"/>
@@ -56,8 +49,22 @@
                 <Button x:Name="AutoButton" Grid.Column="1" Content="Auto" Style="{StaticResource AutoButton}"
                         Click="Auto_Click"/>
             </Grid>
-            <TextBlock Text="{Binding HardwareName}" FontSize="11" Foreground="#7B8C9C"
-                       Margin="0,8,0,0" TextTrimming="CharacterEllipsis"/>
+            <Grid Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding HardwareName}" FontSize="11"
+                           Foreground="#7B8C9C" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" Margin="0,0,8,0"/>
+                <Border x:Name="P100FloorBadge" Grid.Column="1" Background="#1A2834" CornerRadius="6"
+                        Padding="7,2" VerticalAlignment="Center" HorizontalAlignment="Right"
+                        BorderBrush="#2EE6A8" BorderThickness="1" Visibility="Collapsed"
+                        ToolTip="Plancher permanent — refroidissement GPU P100">
+                    <TextBlock x:Name="P100FloorText" Text="P100 ≥30 %" FontSize="10"
+                               FontWeight="Bold" Foreground="#2EE6A8"/>
+                </Border>
+            </Grid>
         </StackPanel>
     </Border>
 </UserControl>

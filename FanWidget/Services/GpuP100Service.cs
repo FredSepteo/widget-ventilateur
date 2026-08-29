@@ -7,13 +7,35 @@ namespace FanWidget.Services;
 public sealed class GpuP100Service
 {
     private const string NamePattern = "P100";
+    private readonly object _lock = new();
     private string? _instanceId;
 
     public bool IsAvailable { get; private set; }
     public bool IsEnabled { get; private set; }
     public string DisplayName { get; private set; } = "Tesla P100";
 
-    public bool Refresh()
+    public bool Refresh() =>
+        Refresh(includePowerShellFallback: true);
+
+    /// <summary>Lecture WMI uniquement — pour le polling périodique sans bloquer l'UI.</summary>
+    public bool RefreshLightweight() =>
+        Refresh(includePowerShellFallback: false);
+
+    private bool Refresh(bool includePowerShellFallback)
+    {
+        lock (_lock)
+        {
+            if (TryRefreshViaWmi())
+                return IsAvailable;
+
+            if (includePowerShellFallback)
+                return RefreshViaPowerShell();
+
+            return IsAvailable;
+        }
+    }
+
+    private bool TryRefreshViaWmi()
     {
         try
         {
@@ -31,11 +53,10 @@ public sealed class GpuP100Service
                 DisplayName = name;
                 IsAvailable = !string.IsNullOrWhiteSpace(_instanceId);
 
-                // Status OK = enabled; Error = often disabled
                 var status = obj["Status"]?.ToString() ?? string.Empty;
                 var errorCode = Convert.ToInt32(obj["ConfigManagerErrorCode"] ?? 0);
                 IsEnabled = status.Equals("OK", StringComparison.OrdinalIgnoreCase) && errorCode == 0;
-                return IsAvailable;
+                return true;
             }
         }
         catch
@@ -43,23 +64,26 @@ public sealed class GpuP100Service
             // ignore
         }
 
-        // Fallback via Get-PnpDevice
-        return RefreshViaPowerShell();
+        return false;
     }
 
     public bool SetEnabled(bool enable, out string? error)
     {
         error = null;
 
-        if (!Refresh() || string.IsNullOrWhiteSpace(_instanceId))
+        lock (_lock)
         {
-            error = "GPU P100 introuvable.";
-            return false;
+            if (!Refresh(includePowerShellFallback: true) || string.IsNullOrWhiteSpace(_instanceId))
+            {
+                error = "GPU P100 introuvable.";
+                return false;
+            }
         }
 
+        var instanceId = _instanceId!;
         var cmd = enable
-            ? $"Enable-PnpDevice -InstanceId '{Escape(_instanceId)}' -Confirm:$false"
-            : $"Disable-PnpDevice -InstanceId '{Escape(_instanceId)}' -Confirm:$false";
+            ? $"Enable-PnpDevice -InstanceId '{Escape(instanceId)}' -Confirm:$false"
+            : $"Disable-PnpDevice -InstanceId '{Escape(instanceId)}' -Confirm:$false";
 
         try
         {
@@ -93,7 +117,10 @@ public sealed class GpuP100Service
 
             // Laisser Windows appliquer l'état
             Thread.Sleep(800);
-            Refresh();
+            lock (_lock)
+            {
+                Refresh(includePowerShellFallback: true);
+            }
             return true;
         }
         catch (Exception ex)

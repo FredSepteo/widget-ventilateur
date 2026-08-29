@@ -32,11 +32,13 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, float> _pendingSpeeds = [];
     private readonly DispatcherTimer _refreshTimer;
     private readonly DispatcherTimer _applyTimer;
+    private readonly DispatcherTimer _p100StateTimer;
 
     private TrayService? _tray;
     private bool _exitRequested;
     private bool _balloonShown;
     private bool _startupProfileApplied;
+    private int _p100PollInFlight;
 
     public MainWindow()
     {
@@ -47,6 +49,9 @@ public partial class MainWindow : Window
 
         _applyTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(180) };
         _applyTimer.Tick += (_, _) => FlushPendingSpeeds();
+
+        _p100StateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        _p100StateTimer.Tick += (_, _) => PollP100HardwareState();
 
         Loaded += OnLoaded;
         ContentRendered += (_, _) => UpdateTilesLayout();
@@ -90,6 +95,7 @@ public partial class MainWindow : Window
         ApplyP100FanConstraints();
         RefreshReadings();
         _refreshTimer.Start();
+        _p100StateTimer.Start();
         UpdateTilesLayout();
         Dispatcher.BeginInvoke(UpdateTilesLayout, DispatcherPriority.Loaded);
         Dispatcher.BeginInvoke(UpdateTilesLayout, DispatcherPriority.Render);
@@ -463,6 +469,7 @@ public partial class MainWindow : Window
     {
         _refreshTimer.Stop();
         _applyTimer.Stop();
+        _p100StateTimer.Stop();
         FlushPendingSpeeds();
         _tray?.Dispose();
         _fanService.Dispose();
@@ -486,6 +493,7 @@ public partial class MainWindow : Window
         Show();
         WindowState = WindowState.Normal;
         Activate();
+        PollP100HardwareState();
     }
 
     private void ExitFromTray()
@@ -573,9 +581,42 @@ public partial class MainWindow : Window
         }
     }
 
-    private void RefreshP100Ui()
+    private void PollP100HardwareState()
     {
-        _p100Service.Refresh();
+        if (!_uiStore.ShowP100Tile)
+            return;
+
+        if (Interlocked.CompareExchange(ref _p100PollInFlight, 1, 0) != 0)
+            return;
+
+        Task.Run(() =>
+        {
+            try
+            {
+                var wasEnabled = _p100Service.IsEnabled;
+                var wasAvailable = _p100Service.IsAvailable;
+                _p100Service.RefreshLightweight();
+
+                if (_p100Service.IsEnabled == wasEnabled && _p100Service.IsAvailable == wasAvailable)
+                    return;
+
+                Dispatcher.BeginInvoke(() =>
+                {
+                    RefreshP100Ui(refreshHardware: false);
+                    ApplyP100FanConstraints();
+                }, DispatcherPriority.Background);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _p100PollInFlight, 0);
+            }
+        });
+    }
+
+    private void RefreshP100Ui(bool refreshHardware = true)
+    {
+        if (refreshHardware)
+            _p100Service.Refresh();
 
         if (!_p100Service.IsAvailable)
         {
