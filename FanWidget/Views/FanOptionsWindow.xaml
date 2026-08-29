@@ -36,8 +36,11 @@
                           Content="Démarrer avec Windows" Margin="0,0,0,8"
                           ToolTip="Lancer Airflow automatiquement à la connexion Windows"/>
                 <CheckBox x:Name="P100TileToggle" Style="{StaticResource AirflowCheckBox}"
-                          Content="Afficher la tuile GPU P100"
+                          Content="Afficher la tuile GPU P100" Margin="0,0,0,8"
                           ToolTip="Afficher ou masquer la carte de contrôle du GPU P100 dans le widget"/>
+                <CheckBox x:Name="P100StartupToggle" Style="{StaticResource AirflowCheckBox}"
+                          Content="Activer la P100 au démarrage"
+                          ToolTip="Active ou désactive le GPU P100 à chaque lancement d'Airflow (indépendamment des profils ventilateurs)"/>
             </StackPanel>
         </Border>
 

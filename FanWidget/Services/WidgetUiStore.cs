@@ -6,6 +6,7 @@ namespace FanWidget.Services;
 public sealed class WidgetUiStore
 {
     private bool _showP100Tile = true;
+    private bool _p100EnabledAtStartup = true;
     private string? _p100LinkedFanId;
 
     private string StorePath =>
@@ -15,6 +16,8 @@ public sealed class WidgetUiStore
             "ui-settings.json");
 
     public bool ShowP100Tile => _showP100Tile;
+
+    public bool P100EnabledAtStartup => _p100EnabledAtStartup;
 
     public string? P100LinkedFanId =>
         string.IsNullOrWhiteSpace(_p100LinkedFanId) ? null : _p100LinkedFanId;
@@ -30,6 +33,7 @@ public sealed class WidgetUiStore
     public void Load()
     {
         _showP100Tile = true;
+        _p100EnabledAtStartup = true;
         _p100LinkedFanId = null;
         try
         {
@@ -42,6 +46,7 @@ public sealed class WidgetUiStore
                 return;
 
             _showP100Tile = data.ShowP100Tile;
+            _p100EnabledAtStartup = data.P100EnabledAtStartup ?? true;
             _p100LinkedFanId = string.IsNullOrWhiteSpace(data.P100LinkedFanId)
                 ? null
                 : data.P100LinkedFanId.Trim();
@@ -49,6 +54,7 @@ public sealed class WidgetUiStore
         catch
         {
             _showP100Tile = true;
+            _p100EnabledAtStartup = true;
             _p100LinkedFanId = null;
         }
     }
@@ -56,6 +62,12 @@ public sealed class WidgetUiStore
     public void SetShowP100Tile(bool visible)
     {
         _showP100Tile = visible;
+        Save();
+    }
+
+    public void SetP100EnabledAtStartup(bool enabled)
+    {
+        _p100EnabledAtStartup = enabled;
         Save();
     }
 
@@ -74,6 +86,7 @@ public sealed class WidgetUiStore
             var json = JsonSerializer.Serialize(new UiSettings
             {
                 ShowP100Tile = _showP100Tile,
+                P100EnabledAtStartup = _p100EnabledAtStartup,
                 P100LinkedFanId = _p100LinkedFanId,
             }, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(StorePath, json);
@@ -87,6 +100,7 @@ public sealed class WidgetUiStore
     private sealed class UiSettings
     {
         public bool ShowP100Tile { get; set; } = true;
+        public bool? P100EnabledAtStartup { get; set; }
         public string? P100LinkedFanId { get; set; }
     }
 }

@@ -92,6 +92,7 @@ public partial class MainWindow : Window
         UpdateStatusText();
         RefreshP100Ui();
         ApplyStartupProfileIfNeeded();
+        ApplyP100StartupState();
         ApplyP100FanConstraints();
         RefreshReadings();
         _refreshTimer.Start();
@@ -111,8 +112,43 @@ public partial class MainWindow : Window
             return;
 
         _startupProfileApplied = true;
-        ApplyProfile(startup, notify: false);
+        ApplyProfile(startup, notify: false, applyP100: false);
         StatusText.Text = $"Profil « {startup.Name} » appliqué au démarrage";
+    }
+
+    private void ApplyP100StartupState()
+    {
+        if (!_p100Service.Refresh() || !_p100Service.IsAvailable)
+            return;
+
+        var targetEnabled = _uiStore.P100EnabledAtStartup;
+        if (_p100Service.IsEnabled == targetEnabled)
+            return;
+
+        if (!_p100Service.SetEnabled(targetEnabled, out _))
+            return;
+
+        ApplyP100LinkedFanSpeedForGpuState(targetEnabled);
+        RefreshP100Ui();
+        ApplyP100FanConstraints();
+    }
+
+    private void ApplyP100LinkedFanSpeedForGpuState(bool p100Enabled)
+    {
+        var linkedFanId = GetP100LinkedFanId();
+        if (string.IsNullOrEmpty(linkedFanId))
+            return;
+
+        var fanPercent = p100Enabled ? 100 : P100LinkedMinFanPercent;
+        _pendingSpeeds.Remove(linkedFanId);
+        _fanService.SetFanSpeed(linkedFanId, fanPercent);
+
+        if (_rowsById.TryGetValue(linkedFanId, out var row) && row.Item is not null)
+        {
+            row.Item.SliderValue = fanPercent;
+            row.Item.IsManual = true;
+            row.UpdateVisuals();
+        }
     }
 
     private void BuildFanRows()
@@ -279,7 +315,7 @@ public partial class MainWindow : Window
         };
     }
 
-    private void ApplyProfile(UserProfile profile, bool notify)
+    private void ApplyProfile(UserProfile profile, bool notify, bool applyP100 = true)
     {
         _pendingSpeeds.Clear();
         _applyTimer.Stop();
@@ -308,8 +344,14 @@ public partial class MainWindow : Window
             }
         }
 
-        if (_p100Service.Refresh() && _p100Service.IsAvailable && _p100Service.IsEnabled != profile.P100Enabled)
+        if (applyP100
+            && _p100Service.Refresh()
+            && _p100Service.IsAvailable
+            && _p100Service.IsEnabled != profile.P100Enabled)
+        {
             _p100Service.SetEnabled(profile.P100Enabled, out _);
+            ApplyP100LinkedFanSpeedForGpuState(profile.P100Enabled);
+        }
 
         _profileStore.SetActiveProfile(profile.Id);
         RefreshProfileBadges();
@@ -552,21 +594,9 @@ public partial class MainWindow : Window
                 return;
             }
 
-            var fanPercent = turnOn ? 100 : P100LinkedMinFanPercent;
-            var linkedFanId = GetP100LinkedFanId();
             var linkedFanLabel = GetP100LinkedFanLabel();
-            if (!string.IsNullOrEmpty(linkedFanId))
-            {
-                _pendingSpeeds.Remove(linkedFanId);
-                _fanService.SetFanSpeed(linkedFanId, fanPercent);
-
-                if (_rowsById.TryGetValue(linkedFanId, out var row) && row.Item is not null)
-                {
-                    row.Item.SliderValue = fanPercent;
-                    row.Item.IsManual = true;
-                    row.UpdateVisuals();
-                }
-            }
+            if (!string.IsNullOrEmpty(GetP100LinkedFanId()))
+                ApplyP100LinkedFanSpeedForGpuState(turnOn);
 
             StatusText.Text = turnOn
                 ? $"P100 activé · {linkedFanLabel} → 100 %"

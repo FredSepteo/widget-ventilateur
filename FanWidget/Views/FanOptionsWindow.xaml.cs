@@ -23,6 +23,7 @@ public partial class FanOptionsWindow : Window
 
         StartupToggle.IsChecked = StartupService.IsEnabled();
         P100TileToggle.IsChecked = uiStore.ShowP100Tile;
+        P100StartupToggle.IsChecked = uiStore.P100EnabledAtStartup;
         LoadP100LinkedFanCombo(fans, sysFan1FallbackId);
 
         foreach (var fan in fans)
@@ -91,6 +92,7 @@ public partial class FanOptionsWindow : Window
             StartupService.SetEnabled(false);
 
         _uiStore.SetShowP100Tile(P100TileToggle.IsChecked == true);
+        _uiStore.SetP100EnabledAtStartup(P100StartupToggle.IsChecked == true);
         _uiStore.SetP100LinkedFanId((P100LinkedFanCombo.SelectedItem as FanOption)?.Id);
 
         DialogResult = true;

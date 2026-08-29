@@ -181,7 +181,7 @@ public partial class ProfileManagerWindow : Window
         return new UserProfile
         {
             Name = name,
-            P100Enabled = false,
+            P100Enabled = true,
             Fans = _fans.Select(f => new FanProfileSetting
             {
                 SensorId = f.SensorId,
