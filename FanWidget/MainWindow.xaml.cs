@@ -15,6 +15,7 @@ public partial class MainWindow : Window
     private const int DualColumnWidth = 720;
     private const int TwoColumnTileThreshold = 4;
     private const int P100LinkedMinFanPercent = 30;
+    private const int P100ButtonOnFanPercent = 60;
 
     private static readonly SolidColorBrush AutoBadgeBg = BrushFrom("#2EE6A8");
     private static readonly SolidColorBrush AutoBadgeFg = BrushFrom("#0A0E12");
@@ -128,24 +129,28 @@ public partial class MainWindow : Window
         if (!_p100Service.SetEnabled(targetEnabled, out _))
             return;
 
-        ApplyP100LinkedFanSpeedForGpuState(targetEnabled);
+        if (!targetEnabled)
+            SetP100LinkedFanSpeed(P100LinkedMinFanPercent);
+        else if (!_startupProfileApplied)
+            SetP100LinkedFanSpeed(P100ButtonOnFanPercent);
+
         RefreshP100Ui();
         ApplyP100FanConstraints();
     }
 
-    private void ApplyP100LinkedFanSpeedForGpuState(bool p100Enabled)
+    private void SetP100LinkedFanSpeed(int percent)
     {
         var linkedFanId = GetP100LinkedFanId();
         if (string.IsNullOrEmpty(linkedFanId))
             return;
 
-        var fanPercent = p100Enabled ? 100 : P100LinkedMinFanPercent;
+        var snapped = FanPercent.Snap(percent, P100LinkedMinFanPercent);
         _pendingSpeeds.Remove(linkedFanId);
-        _fanService.SetFanSpeed(linkedFanId, fanPercent);
+        _fanService.SetFanSpeed(linkedFanId, snapped);
 
         if (_rowsById.TryGetValue(linkedFanId, out var row) && row.Item is not null)
         {
-            row.Item.SliderValue = fanPercent;
+            row.Item.SliderValue = snapped;
             row.Item.IsManual = true;
             row.UpdateVisuals();
         }
@@ -337,7 +342,8 @@ public partial class MainWindow : Window
             }
             else
             {
-                var percent = FanPercent.Snap(setting.ManualPercent);
+                var min = IsP100LinkedFan(fan.SensorId) ? P100LinkedMinFanPercent : 0;
+                var percent = FanPercent.Snap(setting.ManualPercent, min);
                 _fanService.SetFanSpeed(fan.SensorId, percent);
                 fan.IsManual = true;
                 fan.SliderValue = percent;
@@ -350,7 +356,6 @@ public partial class MainWindow : Window
             && _p100Service.IsEnabled != profile.P100Enabled)
         {
             _p100Service.SetEnabled(profile.P100Enabled, out _);
-            ApplyP100LinkedFanSpeedForGpuState(profile.P100Enabled);
         }
 
         _profileStore.SetActiveProfile(profile.Id);
@@ -596,10 +601,10 @@ public partial class MainWindow : Window
 
             var linkedFanLabel = GetP100LinkedFanLabel();
             if (!string.IsNullOrEmpty(GetP100LinkedFanId()))
-                ApplyP100LinkedFanSpeedForGpuState(turnOn);
+                SetP100LinkedFanSpeed(turnOn ? P100ButtonOnFanPercent : P100LinkedMinFanPercent);
 
             StatusText.Text = turnOn
-                ? $"P100 activé · {linkedFanLabel} → 100 %"
+                ? $"P100 activé · {linkedFanLabel} → {P100ButtonOnFanPercent} %"
                 : $"P100 désactivé · {linkedFanLabel} → {P100LinkedMinFanPercent} %";
 
             RefreshP100Ui();
@@ -682,7 +687,7 @@ public partial class MainWindow : Window
             P100ToggleButton.Content = "P100 ON";
             P100ToggleButton.Tag = null;
             P100ToggleButton.Foreground = ManualBadgeFg;
-            P100ToggleButton.ToolTip = $"Activer le GPU P100 et {linkedFanLabel} à 100 %";
+            P100ToggleButton.ToolTip = $"Activer le GPU P100 et {linkedFanLabel} à {P100ButtonOnFanPercent} %";
         }
     }
 
