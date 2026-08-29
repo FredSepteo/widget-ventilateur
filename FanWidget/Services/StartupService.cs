@@ -42,6 +42,58 @@ public static class StartupService
             DeleteTask();
     }
 
+    /// <summary>
+    /// Met à jour la tâche planifiée pour qu'elle pointe vers l'exécutable en cours
+    /// (utile après recompilation ou déplacement du dossier).
+    /// </summary>
+    public static void UpdateExecutablePath()
+    {
+        if (!IsEnabled())
+            return;
+
+        CreateTask();
+    }
+
+    public static string? GetRegisteredExecutablePath()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "schtasks",
+                Arguments = $"/Query /TN \"{TaskName}\" /FO LIST /V",
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+
+            using var process = Process.Start(psi);
+            if (process is null)
+                return null;
+
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(3000);
+            if (process.ExitCode != 0)
+                return null;
+
+            foreach (var line in output.Split('\n'))
+            {
+                if (!line.StartsWith("Task To Run:", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var value = line["Task To Run:".Length..].Trim();
+                return value.Trim('"');
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return null;
+    }
+
     public static string GetExecutablePath()
     {
         var processPath = Environment.ProcessPath;

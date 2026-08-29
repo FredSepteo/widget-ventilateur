@@ -1,4 +1,5 @@
 ﻿using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -10,6 +11,11 @@ namespace FanWidget;
 
 public partial class MainWindow : Window
 {
+    private const int SingleColumnWidth = 360;
+    private const int DualColumnWidth = 720;
+    private const int TwoColumnTileThreshold = 4;
+    private const int P100LinkedMinFanPercent = 30;
+
     private static readonly SolidColorBrush AutoBadgeBg = BrushFrom("#2EE6A8");
     private static readonly SolidColorBrush AutoBadgeFg = BrushFrom("#0A0E12");
     private static readonly SolidColorBrush ManualBadgeBg = BrushFrom("#2A3A48");
@@ -43,6 +49,7 @@ public partial class MainWindow : Window
         _applyTimer.Tick += (_, _) => FlushPendingSpeeds();
 
         Loaded += OnLoaded;
+        ContentRendered += (_, _) => UpdateTilesLayout();
         Closing += OnClosing;
         StateChanged += OnStateChanged;
         Closed += OnClosed;
@@ -52,7 +59,9 @@ public partial class MainWindow : Window
     {
         _tray = new TrayService(ShowFromTray, ExitFromTray);
 
-        if (!StartupService.IsEnabled())
+        if (StartupService.IsEnabled())
+            StartupService.UpdateExecutablePath();
+        else
             StartupService.SetEnabled(true);
 
         _labelStore.Load();
@@ -78,8 +87,12 @@ public partial class MainWindow : Window
         UpdateStatusText();
         RefreshP100Ui();
         ApplyStartupProfileIfNeeded();
+        ApplyP100FanConstraints();
         RefreshReadings();
         _refreshTimer.Start();
+        UpdateTilesLayout();
+        Dispatcher.BeginInvoke(UpdateTilesLayout, DispatcherPriority.Loaded);
+        Dispatcher.BeginInvoke(UpdateTilesLayout, DispatcherPriority.Render);
     }
 
     private void ApplyStartupProfileIfNeeded()
@@ -98,7 +111,12 @@ public partial class MainWindow : Window
 
     private void BuildFanRows()
     {
-        FanRowsPanel.Children.Clear();
+        foreach (var row in _rowsById.Values)
+        {
+            if (row.Parent is System.Windows.Controls.Panel panel)
+                panel.Children.Remove(row);
+        }
+
         _fans.Clear();
         _rowsById.Clear();
 
@@ -120,9 +138,10 @@ public partial class MainWindow : Window
             row.AutoRequested += (_, _) => OnFanAuto(item);
             row.RenameRequested += (_, _) => OnFanRename(item);
 
-            FanRowsPanel.Children.Add(row);
             _rowsById[item.SensorId] = row;
         }
+
+        UpdateTilesLayout();
     }
 
     private void ApplyFanVisibility()
@@ -138,6 +157,33 @@ public partial class MainWindow : Window
         }
 
         UpdateStatusText();
+        UpdateTilesLayout();
+    }
+
+    private void UpdateTilesLayout()
+    {
+        var orderedTiles = new List<FrameworkElement> { P100Tile };
+        orderedTiles.AddRange(_fans.Select(fan => _rowsById[fan.SensorId]));
+
+        var visibleTiles = orderedTiles
+            .Where(tile => tile.Visibility == Visibility.Visible)
+            .ToList();
+
+        var twoColumns = visibleTiles.Count > TwoColumnTileThreshold;
+
+        Width = twoColumns ? DualColumnWidth : SingleColumnWidth;
+        MinWidth = twoColumns ? DualColumnWidth - 20 : 340;
+        TilesGapColumnDef.Width = twoColumns ? new GridLength(8) : new GridLength(0);
+        TilesRightColumnDef.Width = twoColumns ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+
+        TilesLeftColumn.Children.Clear();
+        TilesRightColumn.Children.Clear();
+
+        for (var i = 0; i < visibleTiles.Count; i++)
+        {
+            var target = twoColumns && i % 2 == 1 ? TilesRightColumn : TilesLeftColumn;
+            target.Children.Add(visibleTiles[i]);
+        }
     }
 
     private void UpdateStatusText()
@@ -243,9 +289,17 @@ public partial class MainWindow : Window
                 continue;
 
             if (setting.IsAuto)
+            {
                 _fanService.SetAuto(fan.SensorId);
+                fan.IsManual = false;
+            }
             else
-                _fanService.SetFanSpeed(fan.SensorId, SnapPercent(setting.ManualPercent));
+            {
+                var percent = SnapPercent(setting.ManualPercent);
+                _fanService.SetFanSpeed(fan.SensorId, percent);
+                fan.IsManual = true;
+                fan.SliderValue = percent;
+            }
         }
 
         if (_p100Service.Refresh() && _p100Service.IsAvailable && _p100Service.IsEnabled != profile.P100Enabled)
@@ -254,6 +308,7 @@ public partial class MainWindow : Window
         _profileStore.SetActiveProfile(profile.Id);
         RefreshProfileBadges();
         RefreshP100Ui();
+        ApplyP100FanConstraints();
         RefreshReadings();
 
         if (notify)
@@ -265,15 +320,64 @@ public partial class MainWindow : Window
     private void ApplyP100TileVisibility()
     {
         P100Tile.Visibility = _uiStore.ShowP100Tile ? Visibility.Visible : Visibility.Collapsed;
+        UpdateTilesLayout();
     }
 
     private void Options_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new FanOptionsWindow(_fans, _visibilityStore, _uiStore) { Owner = this };
+        var dialog = new FanOptionsWindow(_fans, _visibilityStore, _uiStore, _fanService.SysFan1Id) { Owner = this };
         if (dialog.ShowDialog() == true)
         {
             ApplyFanVisibility();
             ApplyP100TileVisibility();
+            RefreshP100Ui();
+            ApplyP100FanConstraints();
+        }
+    }
+
+    private string GetP100LinkedFanId() =>
+        _uiStore.ResolveP100LinkedFanId(_fanService.SysFan1Id);
+
+    private string GetP100LinkedFanLabel()
+    {
+        var linkedId = GetP100LinkedFanId();
+        var fan = _fans.FirstOrDefault(f => string.Equals(f.SensorId, linkedId, StringComparison.OrdinalIgnoreCase));
+        return fan?.UserLabel ?? "ventilateur lié";
+    }
+
+    private bool IsP100LinkedFan(string sensorId) =>
+        !string.IsNullOrEmpty(GetP100LinkedFanId()) &&
+        string.Equals(sensorId, GetP100LinkedFanId(), StringComparison.OrdinalIgnoreCase);
+
+    private void ApplyP100FanConstraints()
+    {
+        var linkedId = GetP100LinkedFanId();
+
+        foreach (var fan in _fans)
+        {
+            var isLinked = !string.IsNullOrEmpty(linkedId) &&
+                string.Equals(fan.SensorId, linkedId, StringComparison.OrdinalIgnoreCase);
+
+            fan.MinSliderPercent = isLinked ? P100LinkedMinFanPercent : 0;
+
+            if (isLinked && !fan.IsReadOnly)
+            {
+                if (fan.IsAuto)
+                {
+                    fan.IsManual = true;
+                    _fanService.SetFanSpeed(fan.SensorId, Math.Max(P100LinkedMinFanPercent, SnapPercent(fan.SliderValue)));
+                }
+
+                if (fan.SliderValue < P100LinkedMinFanPercent)
+                {
+                    fan.SliderValue = P100LinkedMinFanPercent;
+                    _pendingSpeeds.Remove(fan.SensorId);
+                    _fanService.SetFanSpeed(fan.SensorId, P100LinkedMinFanPercent);
+                }
+            }
+
+            if (_rowsById.TryGetValue(fan.SensorId, out var row))
+                row.UpdateVisuals();
         }
     }
 
@@ -283,6 +387,23 @@ public partial class MainWindow : Window
             return;
 
         var snapped = SnapPercent(e.Percent);
+        if (IsP100LinkedFan(e.SensorId))
+            snapped = Math.Max(snapped, P100LinkedMinFanPercent);
+
+        if (_rowsById.TryGetValue(e.SensorId, out var row) && row.Item is not null)
+        {
+            row.Item.IsManual = true;
+            if (row.Item.SliderValue != snapped)
+            {
+                row.Item.SliderValue = snapped;
+                row.UpdateVisuals();
+            }
+            else if (e.Immediate)
+            {
+                row.UpdateVisuals();
+            }
+        }
+
         _pendingSpeeds[e.SensorId] = snapped;
 
         if (e.Immediate)
@@ -299,6 +420,12 @@ public partial class MainWindow : Window
     {
         if (item.IsReadOnly)
             return;
+
+        if (IsP100LinkedFan(item.SensorId))
+        {
+            StatusText.Text = $"Mode Auto indisponible — {GetP100LinkedFanLabel()} (plancher {P100LinkedMinFanPercent} %)";
+            return;
+        }
 
         item.IsDragging = false;
         _pendingSpeeds.Remove(item.SensorId);
@@ -376,7 +503,9 @@ public partial class MainWindow : Window
 
             _fanService.UpdateReading(item);
 
-            if (!_pendingSpeeds.ContainsKey(item.SensorId) && item.CurrentPercent.HasValue)
+            if (!_pendingSpeeds.ContainsKey(item.SensorId)
+                && !item.IsManual
+                && item.CurrentPercent.HasValue)
                 item.SliderValue = SnapPercent(item.CurrentPercent.Value);
 
             if (_rowsById.TryGetValue(item.SensorId, out var row))
@@ -415,14 +544,15 @@ public partial class MainWindow : Window
                 return;
             }
 
-            var fanPercent = turnOn ? 100 : 0;
-            var sysFan1Id = _fanService.SysFan1Id;
-            if (!string.IsNullOrEmpty(sysFan1Id))
+            var fanPercent = turnOn ? 100 : P100LinkedMinFanPercent;
+            var linkedFanId = GetP100LinkedFanId();
+            var linkedFanLabel = GetP100LinkedFanLabel();
+            if (!string.IsNullOrEmpty(linkedFanId))
             {
-                _pendingSpeeds.Remove(sysFan1Id);
-                _fanService.SetFanSpeed(sysFan1Id, fanPercent);
+                _pendingSpeeds.Remove(linkedFanId);
+                _fanService.SetFanSpeed(linkedFanId, fanPercent);
 
-                if (_rowsById.TryGetValue(sysFan1Id, out var row) && row.Item is not null)
+                if (_rowsById.TryGetValue(linkedFanId, out var row) && row.Item is not null)
                 {
                     row.Item.SliderValue = fanPercent;
                     row.Item.IsManual = true;
@@ -431,11 +561,11 @@ public partial class MainWindow : Window
             }
 
             StatusText.Text = turnOn
-                ? "P100 activé · Sys Fan 1 → 100 %"
-                : "P100 désactivé · Sys Fan 1 → 0 %";
+                ? $"P100 activé · {linkedFanLabel} → 100 %"
+                : $"P100 désactivé · {linkedFanLabel} → {P100LinkedMinFanPercent} %";
 
             RefreshP100Ui();
-            RefreshReadings();
+            ApplyP100FanConstraints();
         }
         finally
         {
@@ -461,6 +591,8 @@ public partial class MainWindow : Window
 
         P100ToggleButton.IsEnabled = true;
 
+        var linkedFanLabel = GetP100LinkedFanLabel();
+
         if (_p100Service.IsEnabled)
         {
             P100StatusText.Text = "ON";
@@ -469,17 +601,17 @@ public partial class MainWindow : Window
             P100ToggleButton.Content = "P100 OFF";
             P100ToggleButton.Tag = "On";
             P100ToggleButton.Foreground = AutoBadgeBg;
-            P100ToggleButton.ToolTip = "Désactiver le GPU P100 et couper Sys Fan 1 (0 %)";
+            P100ToggleButton.ToolTip = $"Désactiver le GPU P100 ({linkedFanLabel} → {P100LinkedMinFanPercent} %)";
         }
         else
         {
             P100StatusText.Text = "OFF";
-            P100StatusBadge.Background = BrushFrom("#6A3030");
-            P100StatusText.Foreground = BrushFrom("#FF8A8A");
+            P100StatusBadge.Background = ManualBadgeBg;
+            P100StatusText.Foreground = ManualBadgeFg;
             P100ToggleButton.Content = "P100 ON";
             P100ToggleButton.Tag = null;
-            P100ToggleButton.Foreground = BrushFrom("#FF8A8A");
-            P100ToggleButton.ToolTip = "Activer le GPU P100 et Sys Fan 1 à 100 %";
+            P100ToggleButton.Foreground = ManualBadgeFg;
+            P100ToggleButton.ToolTip = $"Activer le GPU P100 et {linkedFanLabel} à 100 %";
         }
     }
 

@@ -11,7 +11,11 @@ public partial class FanOptionsWindow : Window
     private readonly WidgetUiStore _uiStore;
     private readonly List<System.Windows.Controls.CheckBox> _checkboxes = [];
 
-    public FanOptionsWindow(IReadOnlyList<FanDisplayItem> fans, FanVisibilityStore store, WidgetUiStore uiStore)
+    public FanOptionsWindow(
+        IReadOnlyList<FanDisplayItem> fans,
+        FanVisibilityStore store,
+        WidgetUiStore uiStore,
+        string? sysFan1FallbackId)
     {
         InitializeComponent();
         _store = store;
@@ -19,6 +23,7 @@ public partial class FanOptionsWindow : Window
 
         StartupToggle.IsChecked = StartupService.IsEnabled();
         P100TileToggle.IsChecked = uiStore.ShowP100Tile;
+        LoadP100LinkedFanCombo(fans, sysFan1FallbackId);
 
         foreach (var fan in fans)
         {
@@ -38,6 +43,21 @@ public partial class FanOptionsWindow : Window
             _checkboxes.Add(cb);
             FanListPanel.Children.Add(cb);
         }
+    }
+
+    private void LoadP100LinkedFanCombo(IReadOnlyList<FanDisplayItem> fans, string? sysFan1FallbackId)
+    {
+        var controllableFans = fans.Where(f => !f.IsReadOnly).ToList();
+        var items = controllableFans
+            .Select(f => new FanOption(f.SensorId, $"{f.UserLabel}  ·  {f.HardwareName}"))
+            .ToList();
+
+        P100LinkedFanCombo.ItemsSource = items;
+        P100LinkedFanCombo.DisplayMemberPath = nameof(FanOption.Label);
+
+        var currentId = _uiStore.P100LinkedFanId ?? sysFan1FallbackId;
+        P100LinkedFanCombo.SelectedItem = items.FirstOrDefault(i => i.Id == currentId)
+            ?? items.FirstOrDefault();
     }
 
     private void ShowAll_Click(object sender, RoutedEventArgs e)
@@ -64,8 +84,14 @@ public partial class FanOptionsWindow : Window
         }
 
         _store.Apply(visibility);
-        StartupService.SetEnabled(StartupToggle.IsChecked == true);
+        var startupEnabled = StartupToggle.IsChecked == true;
+        if (startupEnabled)
+            StartupService.SetEnabled(true);
+        else
+            StartupService.SetEnabled(false);
+
         _uiStore.SetShowP100Tile(P100TileToggle.IsChecked == true);
+        _uiStore.SetP100LinkedFanId((P100LinkedFanCombo.SelectedItem as FanOption)?.Id);
 
         DialogResult = true;
         Close();
@@ -76,4 +102,6 @@ public partial class FanOptionsWindow : Window
         DialogResult = false;
         Close();
     }
+
+    private sealed record FanOption(string Id, string Label);
 }

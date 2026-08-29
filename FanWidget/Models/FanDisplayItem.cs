@@ -12,6 +12,7 @@ public sealed class FanDisplayItem : INotifyPropertyChanged
     private float _sliderValue = 50;
     private bool _isManual;
     private bool _isDragging;
+    private int _minSliderPercent;
 
     public string SensorId { get; init; } = string.Empty;
     public int SortIndex { get; init; }
@@ -72,6 +73,12 @@ public sealed class FanDisplayItem : INotifyPropertyChanged
     {
         get => _isDragging;
         set => SetField(ref _isDragging, value);
+    }
+
+    public int MinSliderPercent
+    {
+        get => _minSliderPercent;
+        set => SetField(ref _minSliderPercent, value);
     }
 
     public bool IsAuto => !IsManual;
