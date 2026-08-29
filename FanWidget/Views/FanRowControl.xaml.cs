@@ -61,7 +61,7 @@ public partial class FanRowControl : System.Windows.Controls.UserControl
             _item.IsDragging = false;
             DragEnded?.Invoke(this, EventArgs.Empty);
 
-            var snapped = SnapPercent(FanSlider.Value, _item.MinSliderPercent);
+            var snapped = FanPercent.Snap(FanSlider.Value, _item.MinSliderPercent);
             _item.SliderValue = snapped;
             PercentText.Text = $"{snapped} %";
             EmitSpeed(immediate: true);
@@ -76,7 +76,7 @@ public partial class FanRowControl : System.Windows.Controls.UserControl
         if (_item.IsReadOnly)
         {
             PercentText.Text = _item.CurrentPercent.HasValue
-                ? $"{SnapPercent(_item.CurrentPercent.Value)} %"
+                ? $"{FanPercent.SnapDisplay(_item.CurrentPercent.Value)} %"
                 : "— %";
 
             if (!_item.IsDragging)
@@ -113,8 +113,8 @@ public partial class FanRowControl : System.Windows.Controls.UserControl
         }
 
         PercentText.Text = _item.IsAuto
-            ? (_item.CurrentPercent.HasValue ? $"~{SnapPercent(_item.CurrentPercent.Value)} %" : "AUTO")
-            : $"{SnapPercent(_item.SliderValue)} %";
+            ? (_item.CurrentPercent.HasValue ? $"~{FanPercent.SnapDisplay(_item.CurrentPercent.Value)} %" : "AUTO")
+            : $"{FanPercent.Snap(_item.SliderValue, _item.MinSliderPercent)} %";
 
         FanSlider.Minimum = 0;
         FanSlider.Maximum = 100;
@@ -151,13 +151,19 @@ public partial class FanRowControl : System.Windows.Controls.UserControl
         if (_updatingUi || _item is null || _item.IsReadOnly)
             return;
 
-        var snapped = SnapPercent(e.NewValue, _item.MinSliderPercent);
+        var snapped = FanPercent.Snap(e.NewValue, _item.MinSliderPercent);
         if (snapped < _item.MinSliderPercent)
         {
             _updatingUi = true;
-            FanSlider.Value = _item.MinSliderPercent;
+            FanSlider.Value = Math.Max(snapped, _item.MinSliderPercent);
             _updatingUi = false;
-            snapped = _item.MinSliderPercent;
+            snapped = Math.Max(snapped, _item.MinSliderPercent);
+        }
+        else if (snapped != e.NewValue)
+        {
+            _updatingUi = true;
+            FanSlider.Value = snapped;
+            _updatingUi = false;
         }
 
         _item.SliderValue = snapped;
@@ -170,7 +176,7 @@ public partial class FanRowControl : System.Windows.Controls.UserControl
         if (_item is null || _item.IsReadOnly)
             return;
 
-        SpeedChanged?.Invoke(this, new FanSpeedEventArgs(_item.SensorId, SnapPercent(_item.SliderValue, _item.MinSliderPercent), immediate));
+        SpeedChanged?.Invoke(this, new FanSpeedEventArgs(_item.SensorId, FanPercent.Snap(_item.SliderValue, _item.MinSliderPercent), immediate));
     }
 
     private void Auto_Click(object sender, RoutedEventArgs e)
@@ -183,9 +189,6 @@ public partial class FanRowControl : System.Windows.Controls.UserControl
 
     private void Rename_Click(object sender, RoutedEventArgs e) =>
         RenameRequested?.Invoke(this, EventArgs.Empty);
-
-    private static int SnapPercent(double value, int minimum = 0) =>
-        (int)(Math.Round(Math.Clamp(value, minimum, 100) / 10.0) * 10);
 
     private static SolidColorBrush Brush(string hex)
     {

@@ -111,7 +111,7 @@ public partial class ProfileEditWindow : Window
             Maximum = 100,
             TickFrequency = 10,
             IsSnapToTickEnabled = true,
-            Value = setting.ManualPercent,
+            Value = FanPercent.Snap(setting.ManualPercent),
             VerticalAlignment = VerticalAlignment.Center,
             IsEnabled = !fan.IsReadOnly && modeCombo.SelectedIndex == 1,
             Style = (Style)System.Windows.Application.Current.FindResource("FanSlider"),
@@ -119,7 +119,7 @@ public partial class ProfileEditWindow : Window
 
         var percentLabel = new TextBlock
         {
-            Text = $"{SnapPercent(slider.Value)} %",
+            Text = $"{FanPercent.Snap(slider.Value)} %",
             Foreground = Brush("#2EE6A8"),
             VerticalAlignment = VerticalAlignment.Center,
             MinWidth = 40,
@@ -134,7 +134,12 @@ public partial class ProfileEditWindow : Window
         };
 
         slider.ValueChanged += (_, _) =>
-            percentLabel.Text = $"{SnapPercent(slider.Value)} %";
+        {
+            var snapped = FanPercent.Snap(slider.Value);
+            if (Math.Abs(slider.Value - snapped) > 0.01)
+                slider.Value = snapped;
+            percentLabel.Text = $"{snapped} %";
+        };
 
         if (fan.IsReadOnly)
         {
@@ -174,7 +179,7 @@ public partial class ProfileEditWindow : Window
         {
             SensorId = r.SensorId,
             IsAuto = r.IsReadOnly || r.ModeCombo.SelectedIndex == 0,
-            ManualPercent = SnapPercent(r.Slider.Value),
+            ManualPercent = FanPercent.Snap(r.Slider.Value),
         }).ToList();
 
         ResultProfile = _profile;
@@ -187,9 +192,6 @@ public partial class ProfileEditWindow : Window
         DialogResult = false;
         Close();
     }
-
-    private static int SnapPercent(double value) =>
-        (int)(Math.Round(Math.Clamp(value, 0, 100) / 10.0) * 10);
 
     private static SolidColorBrush Brush(string hex)
     {

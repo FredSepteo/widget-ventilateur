@@ -303,7 +303,7 @@ public partial class MainWindow : Window
             {
                 SensorId = fan.SensorId,
                 IsAuto = fan.IsReadOnly || !fan.IsManual,
-                ManualPercent = SnapPercent(fan.SliderValue),
+                ManualPercent = FanPercent.Snap(fan.SliderValue),
             };
         }).ToList();
 
@@ -337,7 +337,7 @@ public partial class MainWindow : Window
             }
             else
             {
-                var percent = SnapPercent(setting.ManualPercent);
+                var percent = FanPercent.Snap(setting.ManualPercent);
                 _fanService.SetFanSpeed(fan.SensorId, percent);
                 fan.IsManual = true;
                 fan.SliderValue = percent;
@@ -413,7 +413,7 @@ public partial class MainWindow : Window
                 if (fan.IsAuto)
                 {
                     fan.IsManual = true;
-                    _fanService.SetFanSpeed(fan.SensorId, Math.Max(P100LinkedMinFanPercent, SnapPercent(fan.SliderValue)));
+                    _fanService.SetFanSpeed(fan.SensorId, FanPercent.Snap(fan.SliderValue, P100LinkedMinFanPercent));
                 }
 
                 if (fan.SliderValue < P100LinkedMinFanPercent)
@@ -434,7 +434,7 @@ public partial class MainWindow : Window
         if (_fanService.IsReadOnly(e.SensorId))
             return;
 
-        var snapped = SnapPercent(e.Percent);
+        var snapped = FanPercent.Snap(e.Percent);
         if (IsP100LinkedFan(e.SensorId))
             snapped = Math.Max(snapped, P100LinkedMinFanPercent);
 
@@ -556,7 +556,7 @@ public partial class MainWindow : Window
             if (!_pendingSpeeds.ContainsKey(item.SensorId)
                 && !item.IsManual
                 && item.CurrentPercent.HasValue)
-                item.SliderValue = SnapPercent(item.CurrentPercent.Value);
+                item.SliderValue = FanPercent.SnapDisplay(item.CurrentPercent.Value);
 
             if (_rowsById.TryGetValue(item.SensorId, out var row))
                 row.UpdateVisuals();
@@ -569,7 +569,7 @@ public partial class MainWindow : Window
 
         foreach (var (sensorId, percent) in _pendingSpeeds.ToList())
         {
-            _fanService.SetFanSpeed(sensorId, SnapPercent(percent));
+            _fanService.SetFanSpeed(sensorId, FanPercent.Snap(percent));
             _pendingSpeeds.Remove(sensorId);
         }
     }
@@ -706,9 +706,6 @@ public partial class MainWindow : Window
 
         return int.TryParse(identifier[(lastSlash + 1)..], out var index) ? index : -1;
     }
-
-    private static int SnapPercent(double value) =>
-        (int)(Math.Round(Math.Clamp(value, 0, 100) / 10.0) * 10);
 
     private static SolidColorBrush BrushFrom(string hex)
     {
