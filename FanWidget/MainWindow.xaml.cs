@@ -24,6 +24,7 @@ public partial class MainWindow : Window
 
     private readonly FanControlService _fanService = new();
     private readonly GpuP100Service _p100Service = new();
+    private readonly GpuTemperatureService _gpuTemperatureService = new();
     private readonly FanLabelStore _labelStore = new();
     private readonly FanVisibilityStore _visibilityStore = new();
     private readonly WidgetUiStore _uiStore = new();
@@ -34,12 +35,14 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _refreshTimer;
     private readonly DispatcherTimer _applyTimer;
     private readonly DispatcherTimer _p100StateTimer;
+    private readonly DispatcherTimer _p100TempTimer;
 
     private TrayService? _tray;
     private bool _exitRequested;
     private bool _balloonShown;
     private bool _startupProfileApplied;
     private int _p100PollInFlight;
+    private int _p100TempPollInFlight;
 
     public MainWindow()
     {
@@ -53,6 +56,9 @@ public partial class MainWindow : Window
 
         _p100StateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
         _p100StateTimer.Tick += (_, _) => PollP100HardwareState();
+
+        _p100TempTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        _p100TempTimer.Tick += (_, _) => ScheduleP100TemperatureUpdate();
 
         Loaded += OnLoaded;
         ContentRendered += (_, _) => UpdateTilesLayout();
@@ -98,6 +104,11 @@ public partial class MainWindow : Window
         RefreshReadings();
         _refreshTimer.Start();
         _p100StateTimer.Start();
+        Dispatcher.BeginInvoke(() =>
+        {
+            _p100TempTimer.Start();
+            ScheduleP100TemperatureUpdate();
+        }, DispatcherPriority.Background);
         UpdateTilesLayout();
         Dispatcher.BeginInvoke(UpdateTilesLayout, DispatcherPriority.Loaded);
         Dispatcher.BeginInvoke(UpdateTilesLayout, DispatcherPriority.Render);
@@ -517,9 +528,11 @@ public partial class MainWindow : Window
         _refreshTimer.Stop();
         _applyTimer.Stop();
         _p100StateTimer.Stop();
+        _p100TempTimer.Stop();
         FlushPendingSpeeds();
         _tray?.Dispose();
         _fanService.Dispose();
+        _gpuTemperatureService.Dispose();
     }
 
     private void HideToTray()
@@ -639,6 +652,7 @@ public partial class MainWindow : Window
                 {
                     RefreshP100Ui(refreshHardware: false);
                     ApplyP100FanConstraints();
+                    ScheduleP100TemperatureUpdate();
                 }, DispatcherPriority.Background);
             }
             finally
@@ -662,6 +676,7 @@ public partial class MainWindow : Window
             P100ToggleButton.Content = "P100 —";
             P100ToggleButton.Tag = null;
             P100ToggleButton.Foreground = ManualBadgeFg;
+            UpdateP100TemperatureUi(null, collapseBadge: true);
             return;
         }
 
@@ -689,6 +704,64 @@ public partial class MainWindow : Window
             P100ToggleButton.Foreground = ManualBadgeFg;
             P100ToggleButton.ToolTip = $"Activer le GPU P100 et {linkedFanLabel} à {P100ButtonOnFanPercent} %";
         }
+
+        ScheduleP100TemperatureUpdate();
+    }
+
+    private void ScheduleP100TemperatureUpdate()
+    {
+        if (!_uiStore.ShowP100Tile || !_p100Service.IsAvailable)
+        {
+            UpdateP100TemperatureUi(null, collapseBadge: true);
+            return;
+        }
+
+        if (Interlocked.CompareExchange(ref _p100TempPollInFlight, 1, 0) != 0)
+            return;
+
+        Task.Run(() =>
+        {
+            try
+            {
+                var temp = _gpuTemperatureService.TryReadP100CoreTemperature();
+                Dispatcher.BeginInvoke(() => UpdateP100TemperatureUi(temp), DispatcherPriority.Background);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _p100TempPollInFlight, 0);
+            }
+        });
+    }
+
+    private void UpdateP100TemperatureUi(float? temp, bool collapseBadge = false)
+    {
+        if (!_uiStore.ShowP100Tile || !_p100Service.IsAvailable || collapseBadge)
+        {
+            P100TempBadge.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        P100TempBadge.Visibility = Visibility.Visible;
+
+        if (temp is null)
+        {
+            P100TempText.Text = "— °C";
+            P100TempText.Foreground = (SolidColorBrush)FindResource("MutedBrush");
+            P100TempBadge.ToolTip = _p100Service.IsEnabled
+                ? "Température GPU indisponible"
+                : "Température indisponible — GPU désactivé";
+            return;
+        }
+
+        var rounded = (int)Math.Round(temp.Value);
+        P100TempText.Text = $"{rounded} °C";
+        P100TempText.Foreground = rounded switch
+        {
+            >= 85 => BrushFrom("#FF8A8A"),
+            >= 70 => BrushFrom("#FFB84D"),
+            _ => (SolidColorBrush)FindResource("AccentBrush"),
+        };
+        P100TempBadge.ToolTip = "Température cœur GPU P100";
     }
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

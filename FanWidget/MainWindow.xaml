@@ -92,6 +92,12 @@
                                             <TextBlock x:Name="P100StatusText" Text="…" FontSize="10" FontWeight="Bold"
                                                        Foreground="{StaticResource MutedBrush}"/>
                                         </Border>
+                                        <Border x:Name="P100TempBadge" Background="#1A2430" CornerRadius="6"
+                                                Padding="7,2" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                BorderBrush="#2A3A48" BorderThickness="1" Visibility="Collapsed">
+                                            <TextBlock x:Name="P100TempText" Text="— °C" FontSize="10" FontWeight="Bold"
+                                                       Foreground="{StaticResource MutedBrush}"/>
+                                        </Border>
                                     </StackPanel>
                                 </StackPanel>
                             </StackPanel>
